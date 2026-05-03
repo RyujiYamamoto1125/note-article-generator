@@ -135,7 +135,6 @@ const mdComponents: React.ComponentProps<typeof ReactMarkdown>["components"] = {
   strong: ({ children }) => (
     <strong className="font-semibold text-gray-900">{children}</strong>
   ),
-  em: ({ children }) => <em className="italic text-gray-600">{children}</em>,
   ul: ({ children }) => (
     <ul className="list-disc ml-5 mb-4 space-y-1 text-gray-700">{children}</ul>
   ),
@@ -148,6 +147,34 @@ const mdComponents: React.ComponentProps<typeof ReactMarkdown>["components"] = {
       {children}
     </blockquote>
   ),
+  img: ({ src, alt }) => (
+    <figure className="my-7">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src || ""}
+        alt={alt || ""}
+        className="w-full rounded-2xl object-cover shadow-md"
+        style={{ maxHeight: "340px" }}
+        loading="lazy"
+      />
+      {alt && !alt.startsWith("Photo by") && (
+        <figcaption className="text-xs text-center text-gray-400 mt-2 italic">
+          {alt}
+        </figcaption>
+      )}
+    </figure>
+  ),
+  em: ({ children }) => {
+    const text = String(children);
+    if (text.startsWith("Photo by ") && text.includes("Pexels")) {
+      return (
+        <span className="block text-xs text-center text-gray-400 -mt-5 mb-4">
+          {text}
+        </span>
+      );
+    }
+    return <em className="italic text-gray-600">{children}</em>;
+  },
 };
 
 // ─── Landing Page ───────────────────────────────────────────────

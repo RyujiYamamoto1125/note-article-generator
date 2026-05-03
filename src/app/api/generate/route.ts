@@ -24,31 +24,94 @@ const REQUIRED_FIELDS = [
   "wordCountLabel",
 ];
 
-function validateRequest(
-  apiKey: unknown,
-  answers: unknown
-): string | null {
+function validateRequest(apiKey: unknown, answers: unknown): string | null {
   if (typeof apiKey !== "string" || !apiKey.startsWith("sk-ant-")) {
     return "APIキーの形式が正しくありません";
   }
-  if (apiKey.length > 500) {
-    return "APIキーが長すぎます";
-  }
+  if (apiKey.length > 500) return "APIキーが長すぎます";
   if (!answers || typeof answers !== "object" || Array.isArray(answers)) {
     return "入力データが不正です";
   }
   const a = answers as Record<string, unknown>;
   for (const field of REQUIRED_FIELDS) {
     if (!a[field] || typeof a[field] !== "string" || !(a[field] as string).trim()) {
-      return `必須項目が入力されていません`;
+      return "必須項目が入力されていません";
     }
   }
   for (const [field, maxLen] of Object.entries(MAX_FIELD_LENGTHS)) {
     if (typeof a[field] === "string" && (a[field] as string).length > maxLen) {
-      return `入力が長すぎます`;
+      return "入力が長すぎます";
     }
   }
   return null;
+}
+
+// ─── Pexels image fetcher ───────────────────────────────────────
+interface PexelsPhoto {
+  src: { large: string; medium: string };
+  photographer: string;
+  alt: string;
+}
+
+async function fetchPexelsImage(
+  query: string
+): Promise<{ url: string; credit: string } | null> {
+  const apiKey = process.env.PEXELS_API_KEY;
+  if (!apiKey) return null;
+  try {
+    const res = await fetch(
+      `https://api.pexels.com/v1/search?query=${encodeURIComponent(
+        query
+      )}&per_page=5&orientation=landscape`,
+      {
+        headers: { Authorization: apiKey },
+        signal: AbortSignal.timeout(6000),
+      }
+    );
+    if (!res.ok) return null;
+    const data = await res.json() as { photos: PexelsPhoto[] };
+    if (!data.photos?.length) return null;
+    // Pick from top 3 at random for variety
+    const photo =
+      data.photos[Math.floor(Math.random() * Math.min(data.photos.length, 3))];
+    return {
+      url: photo.src.large,
+      credit: photo.photographer,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// Replace <!-- img: keywords --> markers with actual image markdown
+async function injectImages(article: string): Promise<string> {
+  if (!process.env.PEXELS_API_KEY) return article;
+
+  const IMG_RE = /<!--\s*img:\s*([^-][^>]*?)\s*-->/g;
+  const markers: { full: string; keywords: string }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = IMG_RE.exec(article)) !== null && markers.length < 5) {
+    markers.push({ full: m[0], keywords: m[1].trim() });
+  }
+  if (!markers.length) return article;
+
+  const results = await Promise.all(
+    markers.map((mk) => fetchPexelsImage(mk.keywords))
+  );
+
+  let out = article;
+  markers.forEach((mk, i) => {
+    const img = results[i];
+    if (img) {
+      out = out.replace(
+        mk.full,
+        `\n![${mk.keywords}](${img.url})\n*Photo by ${img.credit} / Pexels*\n`
+      );
+    } else {
+      out = out.replace(mk.full, "");
+    }
+  });
+  return out;
 }
 
 export async function POST(req: NextRequest) {
@@ -64,7 +127,10 @@ export async function POST(req: NextRequest) {
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: "リクエストの形式が不正です" }, { status: 400 });
+    return NextResponse.json(
+      { error: "リクエストの形式が不正です" },
+      { status: 400 }
+    );
   }
 
   const { apiKey, answers } = body;
@@ -76,10 +142,28 @@ export async function POST(req: NextRequest) {
   const a = answers as Record<string, string>;
   const wordCountLabel = a.wordCountLabel || "2000字程度";
   const rawCount = parseInt(wordCountLabel.replace(/[^0-9]/g, "") || "3000", 10);
-  // 日本語1字 ≈ 1.8トークン。2.7倍で余裕を持たせる。上限32000。
   const maxTokens = Math.min(Math.max(Math.ceil(rawCount * 2.7), 4096), 32000);
 
   const client = new Anthropic({ apiKey: apiKey as string });
+
+  const hasImages = !!process.env.PEXELS_API_KEY;
+  const imageInstruction = hasImages
+    ? `
+【画像挿入指示】
+記事内の視覚的に効果的な箇所（H2見出しの直後、または重要な段落の直後）に最大4か所、
+以下の形式で画像検索キーワードを英語で記述してください：
+<!-- img: relevant english keywords for this section -->
+
+キーワードの例：
+・副業・仕事系 → "freelancer working laptop coffee shop"
+・悩み・課題系 → "stressed person thinking problem career"
+・解決・成功系 → "success achievement happy person celebrating"
+・お金・収入系 → "money coins bills finance income"
+・人物・読者系 → "japanese business person smiling office"
+・行動・実践系 → "person taking action steps journey"
+
+必ずH2見出しの直後の行に配置し、本文とは別の行に書くこと。`
+    : "";
 
   const systemPrompt = `あなたは日本最高峰のコピーライターです。読者の心を動かし、行動を促すnote記事を書く天才です。
 
@@ -93,7 +177,7 @@ export async function POST(req: NextRequest) {
 7. 最後は読者に明確な行動を促すCTAで締める
 8. note向けのマークダウン形式（# ## ### で見出し、**太字**活用）で出力する
 9. 文字数は【${wordCountLabel}】に合わせて執筆する（この指示を最優先）
-
+${imageInstruction}
 【重要】指定された文字数を必ず守り、高品質なnote記事として完成させてください。`;
 
   const userPrompt = `以下の情報をもとに、プロのコピーライターとしてnote記事を執筆してください。
@@ -126,7 +210,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return NextResponse.json({ article: content.text });
+    // Inject Pexels images into the article
+    const article = await injectImages(content.text);
+
+    return NextResponse.json({ article });
   } catch (err: unknown) {
     if (err instanceof Anthropic.APIError) {
       if (err.status === 401) {
@@ -148,7 +235,10 @@ export async function POST(req: NextRequest) {
         );
       }
     }
-    console.error("[generate] unexpected error:", err instanceof Error ? err.message : "unknown");
+    console.error(
+      "[generate] unexpected error:",
+      err instanceof Error ? err.message : "unknown"
+    );
     return NextResponse.json(
       { error: "記事生成中にエラーが発生しました。もう一度お試しください" },
       { status: 500 }
