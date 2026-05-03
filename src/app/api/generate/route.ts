@@ -54,10 +54,9 @@ interface PexelsPhoto {
 }
 
 async function fetchPexelsImage(
-  query: string
+  query: string,
+  apiKey: string
 ): Promise<{ url: string; credit: string } | null> {
-  const apiKey = process.env.PEXELS_API_KEY;
-  if (!apiKey) return null;
   try {
     const res = await fetch(
       `https://api.pexels.com/v1/search?query=${encodeURIComponent(
@@ -84,8 +83,9 @@ async function fetchPexelsImage(
 }
 
 // Replace <!-- img: keywords --> markers with actual image markdown
-async function injectImages(article: string): Promise<string> {
-  if (!process.env.PEXELS_API_KEY) return article;
+async function injectImages(article: string, userPexelsKey?: string): Promise<string> {
+  const key = userPexelsKey || process.env.PEXELS_API_KEY;
+  if (!key) return article;
 
   const IMG_RE = /<!--\s*img:\s*([^-][^>]*?)\s*-->/g;
   const markers: { full: string; keywords: string }[] = [];
@@ -96,7 +96,7 @@ async function injectImages(article: string): Promise<string> {
   if (!markers.length) return article;
 
   const results = await Promise.all(
-    markers.map((mk) => fetchPexelsImage(mk.keywords))
+    markers.map((mk) => fetchPexelsImage(mk.keywords, key))
   );
 
   let out = article;
@@ -123,7 +123,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let body: { apiKey?: unknown; answers?: unknown };
+  let body: { apiKey?: unknown; pexelsKey?: unknown; answers?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -133,7 +133,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { apiKey, answers } = body;
+  const { apiKey, pexelsKey, answers } = body;
+  const userPexelsKey = typeof pexelsKey === "string" && pexelsKey.trim() ? pexelsKey.trim() : undefined;
   const validationError = validateRequest(apiKey, answers);
   if (validationError) {
     return NextResponse.json({ error: validationError }, { status: 400 });
@@ -146,7 +147,7 @@ export async function POST(req: NextRequest) {
 
   const client = new Anthropic({ apiKey: apiKey as string });
 
-  const hasImages = !!process.env.PEXELS_API_KEY;
+  const hasImages = !!(userPexelsKey || process.env.PEXELS_API_KEY);
   const imageInstruction = hasImages
     ? `
 【画像挿入指示】
@@ -211,7 +212,7 @@ ${imageInstruction}
     }
 
     // Inject Pexels images into the article
-    const article = await injectImages(content.text);
+    const article = await injectImages(content.text, userPexelsKey);
 
     return NextResponse.json({ article });
   } catch (err: unknown) {

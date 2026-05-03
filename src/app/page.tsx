@@ -386,69 +386,135 @@ function LandingPage({ onStart }: { onStart: () => void }) {
   );
 }
 
+// ─── Reusable password field ────────────────────────────────────
+function KeyInput({
+  id,
+  value,
+  onChange,
+  placeholder,
+  onEnter,
+  describedBy,
+}: {
+  id: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  onEnter?: () => void;
+  describedBy?: string;
+}) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="relative">
+      <input
+        id={id}
+        type={show ? "text" : "password"}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        autoComplete="off"
+        className="w-full px-4 py-3 border border-gray-300 focus:border-indigo-500 rounded-xl text-gray-800 placeholder-gray-300 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all pr-16"
+        onKeyDown={(e) => e.key === "Enter" && onEnter?.()}
+        aria-describedby={describedBy}
+      />
+      <button
+        type="button"
+        onClick={() => setShow((s) => !s)}
+        aria-label={show ? "キーを隠す" : "キーを表示する"}
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs font-medium transition-colors px-1 py-1"
+      >
+        {show ? "隠す" : "表示"}
+      </button>
+    </div>
+  );
+}
+
 // ─── API Key Screen ─────────────────────────────────────────────
 function ApiKeyScreen({
   apiKey,
   setApiKey,
+  pexelsKey,
+  setPexelsKey,
   onNext,
 }: {
   apiKey: string;
   setApiKey: (v: string) => void;
+  pexelsKey: string;
+  setPexelsKey: (v: string) => void;
   onNext: () => void;
 }) {
-  const [showKey, setShowKey] = useState(false);
   const isValid = apiKey.trim().startsWith("sk-ant-");
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-indigo-600 mb-4 shadow-lg shadow-indigo-200" aria-hidden="true">
+          <div
+            className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-indigo-600 mb-4 shadow-lg shadow-indigo-200"
+            aria-hidden="true"
+          >
             <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
             </svg>
           </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">APIキーを入力</h2>
           <p className="text-sm text-gray-500">
-            <a
-              href="https://console.anthropic.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-indigo-600 hover:underline"
-            >
-              Anthropic Console
-            </a>{" "}
-            で取得したAPIキーを入力してください
+            使用するAPIキーを入力してください
           </p>
         </div>
 
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-7">
-          <label htmlFor="api-key-input" className="block text-sm font-semibold text-gray-700 mb-2">
-            Anthropic APIキー
-          </label>
-          <div className="relative">
-            <input
-              id="api-key-input"
-              type={showKey ? "text" : "password"}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-7 space-y-6">
+          {/* Anthropic key */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label htmlFor="anthropic-key" className="text-sm font-semibold text-gray-700">
+                Anthropic APIキー
+                <span className="ml-1.5 text-xs bg-red-50 text-red-500 border border-red-100 px-1.5 py-0.5 rounded font-medium">必須</span>
+              </label>
+              <a
+                href="/manual#anthropic"
+                target="_blank"
+                className="text-xs text-indigo-500 hover:underline"
+              >
+                取得方法
+              </a>
+            </div>
+            <KeyInput
+              id="anthropic-key"
               value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
+              onChange={setApiKey}
               placeholder="sk-ant-api03-..."
-              autoComplete="off"
-              className="w-full px-4 py-3 border border-gray-300 focus:border-indigo-500 rounded-xl text-gray-800 placeholder-gray-300 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all pr-16"
-              onKeyDown={(e) => e.key === "Enter" && isValid && onNext()}
-              aria-describedby="api-key-hint"
+              onEnter={() => isValid && onNext()}
+              describedBy="key-hint"
             />
-            <button
-              type="button"
-              onClick={() => setShowKey(!showKey)}
-              aria-label={showKey ? "APIキーを隠す" : "APIキーを表示する"}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs font-medium transition-colors px-1 py-1"
-            >
-              {showKey ? "隠す" : "表示"}
-            </button>
           </div>
 
-          <div id="api-key-hint" className="mt-3 flex items-start gap-2 p-3 bg-blue-50 rounded-lg">
+          {/* Pexels key */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label htmlFor="pexels-key" className="text-sm font-semibold text-gray-700">
+                Pexels APIキー
+                <span className="ml-1.5 text-xs bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded font-medium">任意・画像挿入</span>
+              </label>
+              <a
+                href="/manual#pexels"
+                target="_blank"
+                className="text-xs text-indigo-500 hover:underline"
+              >
+                取得方法
+              </a>
+            </div>
+            <KeyInput
+              id="pexels-key"
+              value={pexelsKey}
+              onChange={setPexelsKey}
+              placeholder="例：Abc123XyZ..."
+            />
+            <p className="mt-1.5 text-xs text-gray-400">
+              入力すると記事内に関連画像が自動挿入されます
+            </p>
+          </div>
+
+          <div id="key-hint" className="flex items-start gap-2 p-3 bg-blue-50 rounded-lg">
             <svg className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
@@ -461,23 +527,18 @@ function ApiKeyScreen({
             onClick={onNext}
             disabled={!isValid}
             aria-label="質問ページへ進む"
-            className="w-full mt-5 py-3.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold rounded-xl transition-all shadow-sm shadow-indigo-200 disabled:shadow-none text-sm cursor-pointer disabled:cursor-not-allowed"
+            className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold rounded-xl transition-all shadow-sm shadow-indigo-200 disabled:shadow-none text-sm cursor-pointer disabled:cursor-not-allowed"
           >
             質問へ進む →
           </button>
         </div>
 
         <p className="text-center text-xs text-gray-400 mt-4">
-          APIキーの取得方法は{" "}
-          <a
-            href="https://console.anthropic.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-indigo-500 underline"
-          >
-            Anthropic Console
-          </a>{" "}
-          から
+          APIキーの取得方法がわからない方は{" "}
+          <a href="/manual" target="_blank" className="text-indigo-500 underline">
+            セットアップマニュアル
+          </a>
+          をご覧ください
         </p>
       </div>
     </div>
@@ -1146,6 +1207,7 @@ function ResultScreen({
 export default function Home() {
   const [view, setView] = useState<View>("landing");
   const [apiKey, setApiKey] = useState("");
+  const [pexelsKey, setPexelsKey] = useState("");
   const [answers, setAnswers] = useState<Answers>({});
   const [customWordCount, setCustomWordCount] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -1173,7 +1235,7 @@ export default function Home() {
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiKey, answers: { ...answers, wordCountLabel } }),
+        body: JSON.stringify({ apiKey, pexelsKey: pexelsKey || undefined, answers: { ...answers, wordCountLabel } }),
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
@@ -1220,6 +1282,8 @@ export default function Home() {
       <ApiKeyScreen
         apiKey={apiKey}
         setApiKey={setApiKey}
+        pexelsKey={pexelsKey}
+        setPexelsKey={setPexelsKey}
         onNext={() => setView("questionnaire")}
       />
     );
